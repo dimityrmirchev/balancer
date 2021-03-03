@@ -1,7 +1,14 @@
-package main 
+package main
 
-import "fmt"
+import (
+	"fmt"
+	"log"
+)
 
 func main() {
-	fmt.Println("Hello")
+	config, err := readConfig()
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(config.Backends)
 }

@@ -1,0 +1,6 @@
+{
+    "backends": [
+        "http://localhost:50001",
+        "http://localhost:50002"
+    ]
+}
