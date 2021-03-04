@@ -1,23 +1,25 @@
 package main
 
 import (
+	"net/http/httputil"
+	"net/url"
 	"sync"
 )
 
-type pool struct {
+type backendPool struct {
 	backends []backend
 	current  int
 	mutex    *sync.RWMutex
 }
 
-func (pool *pool) next() *backend {
+func (pool *backendPool) next() *httputil.ReverseProxy {
 	size := len(pool.backends)
 	if size == 0 {
 		return nil
 	}
 
 	if size == 1 && pool.backends[0].isAlive {
-		return &pool.backends[0]
+		return pool.backends[0].proxy
 	}
 
 	pool.mutex.Lock()
@@ -34,7 +36,7 @@ func (pool *pool) next() *backend {
 				pool.current = 0
 			}
 
-			return &pool.backends[i]
+			return pool.backends[i].proxy
 		}
 		pool.current++
 	}
@@ -49,11 +51,22 @@ func (pool *pool) next() *backend {
 				pool.current = 0
 			}
 
-			return &pool.backends[i]
+			return pool.backends[i].proxy
 		}
 
 		pool.current++
 	}
 
 	return nil
+}
+
+func (pool *backendPool) markBackendStatus(url *url.URL, status bool) {
+	for i, backend := range pool.backends {
+		if backend.url.Host == url.Host && backend.url.Port() == url.Port() {
+			pool.mutex.Lock()
+			defer pool.mutex.Unlock()
+			pool.backends[i].isAlive = status
+			return
+		}
+	}
 }

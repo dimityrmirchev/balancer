@@ -35,7 +35,22 @@ func main() {
 
 func balance(w http.ResponseWriter, req *http.Request) {
 	proxy := pool.next()
+
+	if proxy == nil {
+		http.Error(w, "Service unavailable", http.StatusServiceUnavailable)
+		return
+	}
+
+	proxy.ErrorHandler = handleError
+
 	proxy.ServeHTTP(w, req)
+}
+
+func handleError(w http.ResponseWriter, req *http.Request, err error) {
+	log.Printf("Host %s is unavailable on port %s. Error: %s", req.URL.Host, req.URL.Port(), err.Error())
+
+	pool.markBackendStatus(req.URL, false)
+	balance(w, req)
 }
 
 func parseBackends(urls []string) []backend {
