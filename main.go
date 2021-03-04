@@ -4,13 +4,17 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"sync"
+	"time"
 )
 
 var pool backendPool
+var ticker *time.Ticker
+var quit chan struct{}
 
 func main() {
 	port := flag.Int("port", 3001, "port to listen on")
@@ -26,6 +30,8 @@ func main() {
 		Addr:    ":" + fmt.Sprint(*port),
 		Handler: http.HandlerFunc(balance),
 	}
+
+	registerHealthChecks()
 
 	err = server.ListenAndServe()
 	if err != nil {
@@ -67,4 +73,30 @@ func parseBackends(urls []string) []backend {
 
 	}
 	return backends
+}
+
+func registerHealthChecks() {
+	ticker = time.NewTicker(5 * time.Second)
+	quit = make(chan struct{})
+	go func() {
+		for {
+			select {
+			case <-ticker.C:
+				for _, v := range pool.backends {
+					timeout := time.Second
+					conn, err := net.DialTimeout("tcp", v.url.Host, timeout)
+					if err != nil {
+						log.Printf("Cannot establish connection. Error: %s", err.Error())
+						pool.markBackendStatus(v.url, true)
+					} else if conn != nil {
+						defer conn.Close()
+						pool.markBackendStatus(v.url, true)
+					}
+				}
+			case <-quit:
+				ticker.Stop()
+				return
+			}
+		}
+	}()
 }
