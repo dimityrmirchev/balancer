@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 )
@@ -17,14 +18,21 @@ var ticker *time.Ticker
 var quit chan struct{}
 
 func main() {
-	port := flag.Int("port", 3001, "port to listen on")
+	port := flag.Int("port", 3001, "Port to listen on")
+	backendsRawVal := flag.String("backends", "", "A list of backends to balance between separated with ','")
 	flag.Parse()
-	config, err := readConfig()
-	if err != nil {
-		log.Fatal(err)
+
+	if *backendsRawVal == "" {
+		log.Fatal("Please provide value for the backends flag")
 	}
 
-	backends := parseBackends(config.Backends)
+	splitBackends := strings.Split(*backendsRawVal, ",")
+	backends := parseBackends(splitBackends)
+
+	if len(backends) == 0 {
+		log.Fatal("Please provide valid backend service urls")
+	}
+
 	pool = backendPool{backends: backends, mutex: new(sync.RWMutex)}
 	server := http.Server{
 		Addr:    ":" + fmt.Sprint(*port),
@@ -33,7 +41,8 @@ func main() {
 
 	registerHealthChecks()
 
-	err = server.ListenAndServe()
+	fmt.Println("Balancer listening on port " + fmt.Sprint(*port))
+	err := server.ListenAndServe()
 	if err != nil {
 		log.Fatal(err)
 	}
